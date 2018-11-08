@@ -51,7 +51,7 @@ create or replace package mk_scheduler_pkg is
   c_running_check_true    constant char(1 byte) := 'Y';
   c_running_check_false   constant char(1 byte) := 'N';
   
-  -- параметры из таблицы
+  -- РїР°СЂР°РјРµС‚СЂС‹ РёР· С‚Р°Р±Р»РёС†С‹
   c_max_parallel_jobs     constant t_parameter_nm := 'max_parallel_jobs';
   c_max_parallel_lvl_jobs constant t_parameter_nm := 'max_parallel_lvl_jobs';
   
@@ -60,7 +60,7 @@ create or replace package mk_scheduler_pkg is
   
   c_job_class             constant t_parameter_nm := 'job_class';
   
-  -- параметры по умолчанию, если в таблице параметров не найдено значение
+  -- РїР°СЂР°РјРµС‚СЂС‹ РїРѕ СѓРјРѕР»С‡Р°РЅРёСЋ, РµСЃР»Рё РІ С‚Р°Р±Р»РёС†Рµ РїР°СЂР°РјРµС‚СЂРѕРІ РЅРµ РЅР°Р№РґРµРЅРѕ Р·РЅР°С‡РµРЅРёРµ
   c_def_max_parallel_jobs     constant t_parameter_num_value := 32;
   c_def_max_parallel_lvl_jobs constant t_parameter_num_value := 32;
   
@@ -101,7 +101,7 @@ create or replace package body mk_scheduler_pkg is
 
   -- Function and procedure implementations
   
-  -- Обновление записи об ошибке
+  -- РћР±РЅРѕРІР»РµРЅРёРµ Р·Р°РїРёСЃРё РѕР± РѕС€РёР±РєРµ
   procedure update_error_message(p_job_id t_job_id, p_error_message t_error_message)
   is
     function update_table(p_job_id t_job_id, p_error_message t_error_message)
@@ -127,7 +127,7 @@ create or replace package body mk_scheduler_pkg is
     update_error_message(p_job_id, null);
   end;
   
-  -- Обновление статуса задания
+  -- РћР±РЅРѕРІР»РµРЅРёРµ СЃС‚Р°С‚СѓСЃР° Р·Р°РґР°РЅРёСЏ
   function update_scheduler_job_status(p_job_id in t_job_id, p_is_active in t_is_active)
   return boolean
   is
@@ -149,7 +149,7 @@ create or replace package body mk_scheduler_pkg is
     if update_scheduler_job_status(p_job_id, p_is_active) then null; end if;
   end;
   
-  -- Получение статуса задания
+  -- РџРѕР»СѓС‡РµРЅРёРµ СЃС‚Р°С‚СѓСЃР° Р·Р°РґР°РЅРёСЏ
   function get_scheduler_job_status(p_job_id in t_job_id)
   return t_is_active
   is
@@ -162,7 +162,7 @@ create or replace package body mk_scheduler_pkg is
     return null;
   end;
   
-  -- Создание записи из переменных
+  -- РЎРѕР·РґР°РЅРёРµ Р·Р°РїРёСЃРё РёР· РїРµСЂРµРјРµРЅРЅС‹С…
   function create_scheduler_job(
     p_owner              mk_scheduler_jobs.owner%type,
     p_job_name           mk_scheduler_jobs.qualified_job_name%type,
@@ -188,7 +188,7 @@ create or replace package body mk_scheduler_pkg is
     return l_return;
   end;
   
-  -- Получение записи по job_id
+  -- РџРѕР»СѓС‡РµРЅРёРµ Р·Р°РїРёСЃРё РїРѕ job_id
   function get_scheduler_job(p_job_id in t_job_id, p_scheduler_job out t_scheduler_job)
   return boolean
   is
@@ -206,7 +206,7 @@ create or replace package body mk_scheduler_pkg is
     if get_scheduler_job(p_job_id, p_scheduler_job) then null; end if;
   end;
   
-  -- Получение полного имени джоба
+  -- РџРѕР»СѓС‡РµРЅРёРµ РїРѕР»РЅРѕРіРѕ РёРјРµРЅРё РґР¶РѕР±Р°
   function get_scheduler_full_job_name(p_job_id in t_job_id, p_full_job_name out t_full_job_name)
   return boolean
   is
@@ -232,7 +232,7 @@ create or replace package body mk_scheduler_pkg is
     return l_return;
   end;
   
-  -- Получение значения параметра
+  -- РџРѕР»СѓС‡РµРЅРёРµ Р·РЅР°С‡РµРЅРёСЏ РїР°СЂР°РјРµС‚СЂР°
   function get_parameter_num_value(p_parameter_nm t_parameter_nm)
   return t_parameter_num_value
   is
@@ -283,7 +283,7 @@ create or replace package body mk_scheduler_pkg is
     return l_return;
   end;
   
-  -- Создание задания
+  -- РЎРѕР·РґР°РЅРёРµ Р·Р°РґР°РЅРёСЏ
   function insert_scheduler_job (p_scheduler_job t_scheduler_job)
   return boolean
   is
@@ -295,7 +295,7 @@ create or replace package body mk_scheduler_pkg is
     return false;
   end;
   
-  -- Создание задания в оракловом шедулере
+  -- РЎРѕР·РґР°РЅРёРµ Р·Р°РґР°РЅРёСЏ РІ РѕСЂР°РєР»РѕРІРѕРј С€РµРґСѓР»РµСЂРµ
   function create_oracle_job(p_job_id t_job_id)
   return boolean
   is
@@ -327,7 +327,7 @@ create or replace package body mk_scheduler_pkg is
     if create_oracle_job(p_job_id) then null; end if;
   end;
   
-  -- Запуск задания (enabled = true)
+  -- Р—Р°РїСѓСЃРє Р·Р°РґР°РЅРёСЏ (enabled = true)
   function enable_scheduler_job(p_job_id t_job_id)
   return boolean
   is
@@ -349,19 +349,19 @@ create or replace package body mk_scheduler_pkg is
     if enable_scheduler_job(p_job_id) then null; end if;
   end;
   
-  -- Планирование активных заданий
+  -- РџР»Р°РЅРёСЂРѕРІР°РЅРёРµ Р°РєС‚РёРІРЅС‹С… Р·Р°РґР°РЅРёР№
   procedure planning_scheduler_jobs
   is
   begin
     for i in (select t.job_id from mk_scheduler_jobs t where t.is_active = c_is_active_active) loop
       create_oracle_job(i.job_id);
       update_scheduler_job_status(i.job_id, c_is_active_created);
-      -- запланировать только созданные задания
+      -- Р·Р°РїР»Р°РЅРёСЂРѕРІР°С‚СЊ С‚РѕР»СЊРєРѕ СЃРѕР·РґР°РЅРЅС‹Рµ Р·Р°РґР°РЅРёСЏ
       update_scheduler_job_status(i.job_id, c_is_active_planned);
     end loop;
   end;
   
-  -- Получить статус ораклового джоба
+  -- РџРѕР»СѓС‡РёС‚СЊ СЃС‚Р°С‚СѓСЃ РѕСЂР°РєР»РѕРІРѕРіРѕ РґР¶РѕР±Р°
   function get_oracle_job_status(p_job_id in t_job_id, p_ora_job_stat out t_ora_job_stat)
   return boolean
   is
@@ -400,7 +400,7 @@ create or replace package body mk_scheduler_pkg is
     return l_return;
   end;
   
-  -- Получить флаг, разрешено ли работать джобу в это время
+  -- РџРѕР»СѓС‡РёС‚СЊ С„Р»Р°Рі, СЂР°Р·СЂРµС€РµРЅРѕ Р»Рё СЂР°Р±РѕС‚Р°С‚СЊ РґР¶РѕР±Сѓ РІ СЌС‚Рѕ РІСЂРµРјСЏ
   function check_time_running_sql(p_job_id t_job_id, p_time in date default sysdate)
   return char
   is
@@ -433,7 +433,7 @@ create or replace package body mk_scheduler_pkg is
     return false;
   end;
   
-  -- Запуск запланированных заданий по этапам
+  -- Р—Р°РїСѓСЃРє Р·Р°РїР»Р°РЅРёСЂРѕРІР°РЅРЅС‹С… Р·Р°РґР°РЅРёР№ РїРѕ СЌС‚Р°РїР°Рј
   procedure refresh_schedules
   is
     l_max_parallel_jobs     t_parameter_num_value;
@@ -443,7 +443,7 @@ create or replace package body mk_scheduler_pkg is
     l_max_parallel_jobs     := nvl(get_parameter_num_value(c_max_parallel_jobs),     c_def_max_parallel_jobs);
     l_max_parallel_lvl_jobs := nvl(get_parameter_num_value(c_max_parallel_lvl_jobs), c_def_max_parallel_lvl_jobs);
     
-    -- проверка, что все джобы с уровня отработали и запуск следующего уровня
+    -- РїСЂРѕРІРµСЂРєР°, С‡С‚Рѕ РІСЃРµ РґР¶РѕР±С‹ СЃ СѓСЂРѕРІРЅСЏ РѕС‚СЂР°Р±РѕС‚Р°Р»Рё Рё Р·Р°РїСѓСЃРє СЃР»РµРґСѓСЋС‰РµРіРѕ СѓСЂРѕРІРЅСЏ
     for lvl in (with finish_flg_with as (
                   select mksj.*, 
                          case 
@@ -492,7 +492,7 @@ create or replace package body mk_scheduler_pkg is
     null;
   end;
   
-  -- Убийство задания
+  -- РЈР±РёР№СЃС‚РІРѕ Р·Р°РґР°РЅРёСЏ
   function kill_scheduler_job(p_job_id t_job_id, p_is_force boolean default false)
   return boolean
   is
@@ -530,7 +530,7 @@ create or replace package body mk_scheduler_pkg is
     if kill_scheduler_job(p_job_id, p_is_force) then null; end if;
   end;
   
-  -- Убийство всех запущенных заданий
+  -- РЈР±РёР№СЃС‚РІРѕ РІСЃРµС… Р·Р°РїСѓС‰РµРЅРЅС‹С… Р·Р°РґР°РЅРёР№
   procedure kill_all_scheduler_jobs(p_is_force boolean default true)
   is
   begin
@@ -539,11 +539,11 @@ create or replace package body mk_scheduler_pkg is
     end loop;
   end;
   
-  -- Мониторинг работы
+  -- РњРѕРЅРёС‚РѕСЂРёРЅРі СЂР°Р±РѕС‚С‹
   procedure monitor_schedules
   is
   begin
-    -- обновление статусов запущенных джобов
+    -- РѕР±РЅРѕРІР»РµРЅРёРµ СЃС‚Р°С‚СѓСЃРѕРІ Р·Р°РїСѓС‰РµРЅРЅС‹С… РґР¶РѕР±РѕРІ
     for i in (select job_id from mk_scheduler_jobs where is_active = c_is_active_running) loop
       case get_oracle_job_status(i.job_id)
         when c_job_stat_scheduled then 
@@ -587,7 +587,7 @@ create or replace package body mk_scheduler_pkg is
       end case;
     end loop;
     
-    -- обновление статусов джобов превысивших время выполнения
+    -- РѕР±РЅРѕРІР»РµРЅРёРµ СЃС‚Р°С‚СѓСЃРѕРІ РґР¶РѕР±РѕРІ РїСЂРµРІС‹СЃРёРІС€РёС… РІСЂРµРјСЏ РІС‹РїРѕР»РЅРµРЅРёСЏ
     for i in (select job_id from mk_scheduler_jobs where is_active = c_is_active_timeout) loop
       case get_oracle_job_status(i.job_id)
         when c_job_stat_scheduled then 
@@ -633,7 +633,7 @@ create or replace package body mk_scheduler_pkg is
       end case;
     end loop;
     
-    -- обновление статусов отмеченных к удалению джобов
+    -- РѕР±РЅРѕРІР»РµРЅРёРµ СЃС‚Р°С‚СѓСЃРѕРІ РѕС‚РјРµС‡РµРЅРЅС‹С… Рє СѓРґР°Р»РµРЅРёСЋ РґР¶РѕР±РѕРІ
     for i in (select job_id from mk_scheduler_jobs where is_active = c_is_active_send_kill) loop
       case get_oracle_job_status(i.job_id)
         when c_job_stat_scheduled then 
@@ -672,7 +672,7 @@ create or replace package body mk_scheduler_pkg is
       end case;
     end loop;
     
-    -- обновление статусов созданных джобов
+    -- РѕР±РЅРѕРІР»РµРЅРёРµ СЃС‚Р°С‚СѓСЃРѕРІ СЃРѕР·РґР°РЅРЅС‹С… РґР¶РѕР±РѕРІ
     for i in (select job_id from mk_scheduler_jobs where is_active = c_is_active_created) loop
       case get_oracle_job_status(i.job_id)
         when c_job_stat_scheduled then 
@@ -712,7 +712,7 @@ create or replace package body mk_scheduler_pkg is
       end case;
     end loop;
     
-    -- обновление статусов запланированных джобов
+    -- РѕР±РЅРѕРІР»РµРЅРёРµ СЃС‚Р°С‚СѓСЃРѕРІ Р·Р°РїР»Р°РЅРёСЂРѕРІР°РЅРЅС‹С… РґР¶РѕР±РѕРІ
     for i in (select job_id from mk_scheduler_jobs where is_active = c_is_active_planned) loop
       case get_oracle_job_status(i.job_id)
         when c_job_stat_scheduled then 
@@ -754,9 +754,7 @@ create or replace package body mk_scheduler_pkg is
     null;
   end;
   
-  -- временное решение листнера
-  -- переделать с бесконечного цикла на задание по расписанию с интервалом 15 секунд
-  -- где будут 4 программы запускаться по очереди
+  -- РїРµСЂРµРїРёСЃР°С‚СЊ С…Р°СЂРґРєРѕРґ РёРјС‘РЅ РЅР° РїР°СЂР°РјРµС‚СЂС‹
   procedure create_listener
   is
   begin
