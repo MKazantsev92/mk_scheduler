@@ -13,39 +13,12 @@ select column_name,
 
 drop sequence mk_scheduler_jobs_seq;
 drop table mk_scheduler_jobs purge;
-drop table mk_scheduler_jobs_parameters purge;
 
 create sequence mk_scheduler_jobs_seq;
 
-create table mk_scheduler_jobs_parameters (
-  name varchar2(128) not null constraint mk_scheduler_jobs_prm_pk primary key,
-  char_value varchar2(128),
-  num_value number,
-  date_value date,
-  bool_value char(1 byte) constraint mk_scheduler_jobs_prm_bv check (bool_value in ('Y','N')),
-  parameter_comment varchar2(256),
-  constraint mk_scheduler_jobs_prm_ch check 
-    (
-       (char_value is not null and num_value is     null and date_value is     null and bool_value is     null)
-    or (char_value is     null and num_value is not null and date_value is     null and bool_value is     null)
-    or (char_value is     null and num_value is     null and date_value is not null and bool_value is     null)
-    or (char_value is     null and num_value is     null and date_value is     null and bool_value is not null)
-    )
-)
-cache;
-
-insert into mk_scheduler_jobs_parameters (name, num_value, parameter_comment) values ('max_parallel_jobs', 16, 'maximum count of running jobs on one time');
-insert into mk_scheduler_jobs_parameters (name, num_value, parameter_comment) values ('max_parallel_lvl_jobs', 4, 'maximum count of running jobs on one time on one level_id by job_name');
-
-insert into mk_scheduler_jobs_parameters (name, bool_value, parameter_comment) values ('force_stop_running', 'Y', 'send force or normal stop for running jobs');
-insert into mk_scheduler_jobs_parameters (name, bool_value, parameter_comment) values ('force_stop_send_kill', 'Y', 'send force or normal stop for jobs marked to stop');
-
-insert into mk_scheduler_jobs_parameters (name, char_value, parameter_comment) values ('job_class', 'MK_SCHEDULER_JOB_CLASS', 'dbms_scheduler job class name');
-
-commit;
-
-select * from mk_scheduler_jobs_parameters;
-
+-- добавить refresh_time
+-- добавить start_date
+-- добавить work interval
 create table mk_scheduler_jobs (
   job_id integer not null constraint mk_scheduler_jobs_pk primary key,
   owner varchar2(128 byte),
@@ -64,6 +37,9 @@ create table mk_scheduler_jobs (
 );
 
 create index i_mk_scheduler_jobs_is_act on mk_scheduler_jobs(is_active, job_id);
+
+-- добавить дату старта
+-- добавить часы выполнения с .. по ..
 
 select t.*, rowid from mk_scheduler_jobs t;
 
@@ -115,6 +91,17 @@ insert into mk_scheduler_jobs (job_id, owner, job_name, level_id, job_action)
 values (mk_scheduler_jobs_seq.nextval, 'MK', 'TEST_JOB2', 4, 'begin dbms_lock.sleep(30); end;');
 
 commit;
+
+/*
+call
+dbms_scheduler.create_job(job_name => 'MK.MK_SCHEDULER_JOB_0000000000003',
+                          job_type => 'plsql_block',
+                          job_action => 'begin error end;'
+                          );
+
+call
+dbms_scheduler.enable(name => 'MK.MK_SCHEDULER_JOB_0000000000003');
+*/
 
 select * from dba_scheduler_jobs where owner = 'MK';
 
@@ -176,7 +163,8 @@ select /*+ use_nl(mksj sj srj jrd)*/
        sj.run_count,
        sj.retry_count,
        sj.failure_count,
-       sj.restartable
+       sj.restartable,
+       sj.restart_on_failure
   from mk_scheduler_jobs mksj
   left join all_scheduler_jobs sj
     on sj.owner = mksj.owner
@@ -190,8 +178,12 @@ select /*+ use_nl(mksj sj srj jrd)*/
  order by job_id
 ;
 
+-- написать представление Not_started_becouse_of...
+
 update mk_scheduler_jobs set is_active = 'A';
 commit;
+
+--select * from all_scheduler_jobs;
 
 select t.*, rowid from mk_scheduler_jobs t;
 
@@ -202,11 +194,3 @@ begin mk_scheduler_pkg.create_listener; end;
 
 --begin mk_scheduler_pkg.kill_all_scheduler_jobs; end;
 /
-
-select * from dba_scheduler_jobs where job_name = 'MK_SCHEDULER_JOBS_MONITORING';
-select * from dba_scheduler_jobs where job_name = 'MK_SCHEDULER_JOBS_PLANNING';
-select * from dba_scheduler_jobs where job_name = 'MK_SCHEDULER_JOBS_REFRESH';
-
-select * from dba_scheduler_job_run_details where job_name = 'MK_SCHEDULER_JOBS_MONITORING' order by 1 desc;
-select * from dba_scheduler_job_run_details where job_name = 'MK_SCHEDULER_JOBS_PLANNING' order by 1 desc;
-select * from dba_scheduler_job_run_details where job_name = 'MK_SCHEDULER_JOBS_REFRESH' order by 1 desc;
