@@ -44,7 +44,7 @@ insert into mk_scheduler_jobs_parameters (name, char_value, parameter_comment) v
 
 commit;
 
-select * from mk_scheduler_jobs_parameters;
+select t.*, rowid from mk_scheduler_jobs_parameters t;
 
 create table mk_scheduler_jobs (
   job_id integer not null constraint mk_scheduler_jobs_pk primary key,
@@ -195,9 +195,14 @@ commit;
 
 select t.*, rowid from mk_scheduler_jobs t;
 
-select t.* from mk_scheduler_jobs_v t;
+select t.* from mk_scheduler_jobs_v as of timestamp (to_timestamp('08.11.2018 22:58:20','dd.mm.yyyy hh24:mi:ss'))t;
+
+select mk_scheduler_pkg.check_time_running_sql(t.job_id) flg, t.* from mk_scheduler_jobs_v t;
 
 begin mk_scheduler_pkg.create_listener; end;
+/
+
+begin mk_scheduler_pkg.monitor_schedules; end;
 /
 
 --begin mk_scheduler_pkg.kill_all_scheduler_jobs; end;
@@ -210,3 +215,13 @@ select * from dba_scheduler_jobs where job_name = 'MK_SCHEDULER_JOBS_REFRESH';
 select * from dba_scheduler_job_run_details where job_name = 'MK_SCHEDULER_JOBS_MONITORING' order by 1 desc;
 select * from dba_scheduler_job_run_details where job_name = 'MK_SCHEDULER_JOBS_PLANNING' order by 1 desc;
 select * from dba_scheduler_job_run_details where job_name = 'MK_SCHEDULER_JOBS_REFRESH' order by 1 desc;
+
+begin
+  dbms_scheduler.stop_job('MK_SCHEDULER_JOBS_MONITORING');
+  dbms_scheduler.disable('MK_SCHEDULER_JOBS_MONITORING');
+end;
+/
+
+call dbms_scheduler.purge_log(job_name => 'MK_SCHEDULER_JOBS_MONITORING');
+call dbms_scheduler.purge_log(job_name => 'MK_SCHEDULER_JOBS_PLANNING');
+call dbms_scheduler.purge_log(job_name => 'MK_SCHEDULER_JOBS_REFRESH');
