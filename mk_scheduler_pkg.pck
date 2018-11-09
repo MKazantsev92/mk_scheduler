@@ -15,7 +15,7 @@ create or replace package mk_scheduler_pkg is
   subtype t_full_job_name is all_scheduler_job_run_details.job_name%type;
   subtype t_ora_job_stat  is all_scheduler_job_run_details.status%type;
   
-  subtype t_job_class     is all_scheduler_job_classes.job_class_name%type;
+  subtype t_job_class_name       is all_scheduler_job_classes.job_class_name%type;
   
   subtype t_parameter_nm         is mk_scheduler_jobs_parameters.name%type;
   subtype t_parameter_char_value is mk_scheduler_jobs_parameters.char_value%type;
@@ -67,7 +67,7 @@ create or replace package mk_scheduler_pkg is
   c_def_force_stop_running    constant boolean := true;
   c_def_force_stop_send_kill  constant boolean := true;
   
-  c_def_job_class             constant t_job_class := 'DEFAULT_JOB_CLASS';
+  c_def_job_class             constant t_job_class_name := 'DEFAULT_JOB_CLASS';
 
   -- Public function and procedure declarations
   function create_scheduler_job(
@@ -80,8 +80,9 @@ create or replace package mk_scheduler_pkg is
     p_job_action         mk_scheduler_jobs.job_action%type,
     p_job_comment        mk_scheduler_jobs.job_comment%type)
   return t_scheduler_job;
-
-  procedure planning_scheduler_jobs;
+  
+  function check_time_running_sql(p_job_id t_job_id, p_time in date default sysdate)
+  return char;
   
   procedure monitor_schedules;
   
@@ -89,14 +90,74 @@ create or replace package mk_scheduler_pkg is
   
   procedure kill_all_scheduler_jobs(p_is_force boolean default true);
   
-  procedure create_listener;
+  procedure start_listener(p_force boolean default false);
   
-  function check_time_running_sql(p_job_id t_job_id, p_time in date default sysdate)
-  return char;
+  procedure stop_listener(p_force boolean default false);
+  
+  procedure create_listener(p_force_drop boolean default false, p_force_create boolean default false);
   
 end mk_scheduler_pkg;
 /
 create or replace package body mk_scheduler_pkg is
+  
+  -- Private type declarations
+  subtype t_program_name         is all_scheduler_programs.program_name%type;
+  subtype t_chain_name           is all_scheduler_chains.chain_name%type;
+  subtype t_chain_step_name      is all_scheduler_chain_steps.step_name%type;
+  subtype t_chain_rule_name      is all_scheduler_chain_rules.rule_name%type;
+  subtype t_schedule_name        is all_scheduler_schedules.schedule_name%type;
+--  subtype t_job_class_name       is all_scheduler_job_classes.job_class_name%type;
+  subtype t_ora_job_name         is all_scheduler_jobs.job_name%type;
+  subtype t_log_history          is all_scheduler_job_classes.log_history%type;
+  
+  
+  -- Private constant declarations
+  
+  -- параметры из таблицы
+  c_prv_program_monitoring  constant t_parameter_nm := 'listener_program_monitoring';
+  c_prv_program_refresh     constant t_parameter_nm := 'listener_program_refresh';
+                                
+  c_prv_chain_name          constant t_parameter_nm := 'listener_chain_name';
+                                
+  c_prv_chain_step_1        constant t_parameter_nm := 'listener_chain_step_1';
+  c_prv_chain_step_2        constant t_parameter_nm := 'listener_chain_step_2';
+  c_prv_chain_step_3        constant t_parameter_nm := 'listener_chain_step_3';
+                                
+  c_prv_chain_rule_1        constant t_parameter_nm := 'listener_chain_rule_1';
+  c_prv_chain_rule_2        constant t_parameter_nm := 'listener_chain_rule_2';
+  c_prv_chain_rule_3        constant t_parameter_nm := 'listener_chain_rule_3';
+  c_prv_chain_rule_4        constant t_parameter_nm := 'listener_chain_rule_4';
+                                
+  c_prv_schedule_name       constant t_parameter_nm := 'listener_schedule_name_15_seconds';
+                                
+  c_prv_job_class_name      constant t_parameter_nm := 'listener_job_class_name';
+                                
+  c_prv_job_name            constant t_parameter_nm := 'listener_job_name';
+                                
+  c_prv_log_history         constant t_parameter_nm := 'listener_log_history';
+  
+  -- параметры по умолчанию, если в таблице параметров не найдено значение
+  c_prv_def_program_monitoring  constant t_program_name    := 'MK_SCHEDULER_LSNR_MONITORING';
+  c_prv_def_program_refresh     constant t_program_name    := 'MK_SCHEDULER_LSNR_REFRESH';
+                                
+  c_prv_def_chain_name          constant t_chain_name      := 'MK_SCHEDULER_LSNR_CHAIN';
+                                
+  c_prv_def_chain_step_1        constant t_chain_step_name := 'MONITORING_1';
+  c_prv_def_chain_step_2        constant t_chain_step_name := 'REFRESH';
+  c_prv_def_chain_step_3        constant t_chain_step_name := 'MONITORING_2';
+                                
+  c_prv_def_chain_rule_1        constant t_chain_rule_name := 'MK_SCHEDULER_LSNR_CHAIN_RULE_1';
+  c_prv_def_chain_rule_2        constant t_chain_rule_name := 'MK_SCHEDULER_LSNR_CHAIN_RULE_2';
+  c_prv_def_chain_rule_3        constant t_chain_rule_name := 'MK_SCHEDULER_LSNR_CHAIN_RULE_3';
+  c_prv_def_chain_rule_4        constant t_chain_rule_name := 'MK_SCHEDULER_LSNR_CHAIN_RULE_4';
+                                
+  c_prv_def_schedule_name       constant t_schedule_name   := 'MK_SCHEDULE_EVERY_15_SECONDS';
+                                
+  c_prv_def_job_class_name      constant t_job_class_name  := 'MK_SCHEDULER_LSNR_JOB_CLASS';
+                                
+  c_prv_def_job_name            constant t_ora_job_name    := 'MK_SCHEDULER_LSNR_JOB';
+                                
+  c_prv_def_log_history         constant t_log_history     := 14;
 
   -- Function and procedure implementations
   
@@ -300,7 +361,7 @@ create or replace package body mk_scheduler_pkg is
   return boolean
   is
     l_scheduler_job t_scheduler_job := null;
-    l_job_class     t_job_class;
+    l_job_class     t_job_class_name;
   begin
     
     l_job_class := nvl(get_parameter_char_value(c_job_class), c_def_job_class);
@@ -347,18 +408,6 @@ create or replace package body mk_scheduler_pkg is
   is
   begin
     if enable_scheduler_job(p_job_id) then null; end if;
-  end;
-  
-  -- Планирование активных заданий
-  procedure planning_scheduler_jobs
-  is
-  begin
-    for i in (select t.job_id from mk_scheduler_jobs t where t.is_active = c_is_active_active) loop
-      create_oracle_job(i.job_id);
-      update_scheduler_job_status(i.job_id, c_is_active_created);
-      -- запланировать только созданные задания
-      update_scheduler_job_status(i.job_id, c_is_active_planned);
-    end loop;
   end;
   
   -- Получить статус ораклового джоба
@@ -547,6 +596,14 @@ create or replace package body mk_scheduler_pkg is
   procedure monitor_schedules
   is
   begin
+    -- создание и планирование активных джобов
+    for i in (select job_id from mk_scheduler_jobs where is_active = c_is_active_active) loop
+      create_oracle_job(i.job_id);
+      update_scheduler_job_status(i.job_id, c_is_active_created);
+      -- запланировать только созданные задания
+      update_scheduler_job_status(i.job_id, c_is_active_planned);
+    end loop;
+    
     -- обновление статусов запущенных джобов
     for i in (select job_id from mk_scheduler_jobs where is_active = c_is_active_running) loop
       case get_oracle_job_status(i.job_id)
@@ -758,106 +815,333 @@ create or replace package body mk_scheduler_pkg is
     null;
   end;
   
-  -- переписать хардкод имён на параметры
-  procedure create_listener
+  -- статус листнера
+  procedure check_listener
   is
   begin
-    begin sys.dbms_scheduler.drop_job(job_name => 'MK_SCHEDULER_JOBS_MONITORING'); exception when others then null; end;
-    begin sys.dbms_scheduler.drop_job(job_name => 'MK_SCHEDULER_JOBS_PLANNING'); exception when others then null; end;
-    begin sys.dbms_scheduler.drop_job(job_name => 'MK_SCHEDULER_JOBS_REFRESH'); exception when others then null; end;
-    
-    begin sys.dbms_scheduler.drop_job_class(job_class_name => 'MK_SCHEDULER_JOB_CLASS'); exception when others then null; end;
-    begin sys.dbms_scheduler.drop_job_class(job_class_name => 'MK_SCHEDULER_JOB_CLASS_LOG'); exception when others then null; end;
-    
-    begin sys.dbms_scheduler.drop_schedule(schedule_name => 'SCHEDULE_EVERY_2_SECONDS'); exception when others then null; end;
-    begin sys.dbms_scheduler.drop_schedule(schedule_name => 'SCHEDULE_EVERY_10_SECONDS'); exception when others then null; end;
-    begin sys.dbms_scheduler.drop_schedule(schedule_name => 'SCHEDULE_EVERY_10_SECONDS_L_5'); exception when others then null; end;
-    
-    
-    
-    begin
-      sys.dbms_scheduler.create_schedule(schedule_name   => 'SCHEDULE_EVERY_2_SECONDS',
-                                         start_date      => to_date('01-01-2000 00:00:00', 'dd-mm-yyyy hh24:mi:ss'),
-                                         repeat_interval => 'Freq=Secondly;Interval=2',
-                                         end_date        => to_date(null),
-                                         comments        => '');
-    exception when others then null;
-    end;
+    null;
+  end;
+  
+  -- запуск листнера
+  procedure start_listener(p_force boolean default false)
+  is
+    l_prv_def_job_name t_ora_job_name;
+  begin
+    l_prv_def_job_name := nvl(get_parameter_char_value(c_prv_job_name), c_prv_def_job_name);
 
     begin
-      sys.dbms_scheduler.create_schedule(schedule_name   => 'SCHEDULE_EVERY_10_SECONDS',
-                                         start_date      => to_date('01-01-2000 00:00:01', 'dd-mm-yyyy hh24:mi:ss'),
-                                         repeat_interval => 'Freq=Secondly;Interval=10',
-                                         end_date        => to_date(null),
-                                         comments        => '');
-    exception when others then null;
+      dbms_scheduler.enable(l_prv_def_job_name);
+    exception when others then
+      if not p_force then raise; end if;
+    end;
+  end;
+  
+  -- остановка листнера
+  procedure stop_listener(p_force boolean default false)
+  is
+    l_prv_def_job_name t_ora_job_name;
+  begin
+    l_prv_def_job_name := nvl(get_parameter_char_value(c_prv_job_name), c_prv_def_job_name);
+    begin 
+      dbms_scheduler.stop_job(l_prv_def_job_name); 
+    exception when others then null; 
     end;
     
     begin
-      sys.dbms_scheduler.create_schedule(schedule_name   => 'SCHEDULE_EVERY_10_SECONDS_L_5',
-                                         start_date      => to_date('01-01-2000 00:00:06', 'dd-mm-yyyy hh24:mi:ss'),
-                                         repeat_interval => 'Freq=Secondly;Interval=10',
-                                         end_date        => to_date(null),
-                                         comments        => '');
-    exception when others then null;
+      dbms_scheduler.disable(l_prv_def_job_name);
+    exception when others then
+      if not p_force then raise; end if;
+    end;
+  end;
+  
+  -- создание/пересоздание листнера
+  -- переписать хардкод имён на параметры
+  procedure create_listener(p_force_drop boolean default false, p_force_create boolean default false)
+  is
+    l_prv_program_monitoring  t_program_name;
+    l_prv_program_refresh     t_program_name;
+                                 
+    l_prv_chain_name          t_chain_name;
+                                 
+    l_prv_chain_step_1        t_chain_step_name;
+    l_prv_chain_step_2        t_chain_step_name;
+    l_prv_chain_step_3        t_chain_step_name;
+                                 
+    l_prv_chain_rule_1        t_chain_rule_name;
+    l_prv_chain_rule_2        t_chain_rule_name;
+    l_prv_chain_rule_3        t_chain_rule_name;
+    l_prv_chain_rule_4        t_chain_rule_name;
+                                 
+    l_prv_schedule_name       t_schedule_name;
+                                 
+    l_prv_job_class_name      t_job_class_name;
+                                 
+    l_prv_job_name            t_ora_job_name;
+                                 
+    l_prv_log_history         t_log_history;
+  begin
+    
+    l_prv_program_monitoring  := nvl(get_parameter_char_value(c_prv_program_monitoring), c_prv_def_program_monitoring);
+    l_prv_program_refresh     := nvl(get_parameter_char_value(c_prv_program_refresh),    c_prv_def_program_refresh);
+                                 
+    l_prv_chain_name          := nvl(get_parameter_char_value(c_prv_chain_name),         c_prv_def_chain_name);
+                                 
+    l_prv_chain_step_1        := nvl(get_parameter_char_value(c_prv_chain_step_1),       c_prv_def_chain_step_1);
+    l_prv_chain_step_2        := nvl(get_parameter_char_value(c_prv_chain_step_2),       c_prv_def_chain_step_2);
+    l_prv_chain_step_3        := nvl(get_parameter_char_value(c_prv_chain_step_3),       c_prv_def_chain_step_3);
+                                 
+    l_prv_chain_rule_1        := nvl(get_parameter_char_value(c_prv_chain_rule_1),       c_prv_def_chain_rule_1);
+    l_prv_chain_rule_2        := nvl(get_parameter_char_value(c_prv_chain_rule_2),       c_prv_def_chain_rule_2);
+    l_prv_chain_rule_3        := nvl(get_parameter_char_value(c_prv_chain_rule_3),       c_prv_def_chain_rule_3);
+    l_prv_chain_rule_4        := nvl(get_parameter_char_value(c_prv_chain_rule_4),       c_prv_def_chain_rule_4);
+                                 
+    l_prv_schedule_name       := nvl(get_parameter_char_value(c_prv_schedule_name),      c_prv_def_schedule_name);
+                                 
+    l_prv_job_class_name      := nvl(get_parameter_char_value(c_prv_job_class_name),     c_prv_def_job_class_name);
+                                 
+    l_prv_job_name            := nvl(get_parameter_char_value(c_prv_job_name),           c_prv_def_job_name);
+                                 
+    l_prv_log_history         := nvl(get_parameter_num_value(c_prv_log_history),         c_prv_def_log_history);
+    
+    -- drop
+    begin 
+      dbms_scheduler.stop_job(job_name => l_prv_job_name, force => p_force_drop);
+    exception when others then
+      null;
+    end;
+
+
+    begin 
+      dbms_scheduler.disable(name => l_prv_job_name);
+    exception when others then 
+      if not p_force_drop then raise; end if;
+    end;
+
+
+    begin 
+      dbms_scheduler.drop_job(job_name => l_prv_job_name);
+    exception when others then
+      if not p_force_drop then raise; end if;
     end;
 
     begin
-      sys.dbms_scheduler.create_job_class(job_class_name          => 'MK_SCHEDULER_JOB_CLASS',
-                                          logging_level           => sys.dbms_scheduler.logging_runs,
-                                          comments                => 'mk scheduler jobs class');
-    exception when others then null;
+      dbms_scheduler.drop_job_class(job_class_name => l_prv_job_class_name);
+    exception when others then
+      if not p_force_drop then raise; end if;
+    end;
+
+
+    begin
+      dbms_scheduler.drop_schedule(schedule_name => l_prv_schedule_name);
+    exception when others then
+      if not p_force_drop then raise; end if;
     end;
 
     begin
-      sys.dbms_scheduler.create_job_class(job_class_name          => 'MK_SCHEDULER_JOB_CLASS_LOG',
-                                          logging_level           => sys.dbms_scheduler.logging_failed_runs,
-                                          log_history             => 90,
-                                          comments                => 'mk scheduler jobs class');
-    exception when others then null;
+      dbms_scheduler.disable(name => l_prv_chain_name);
+    exception when others then
+      if not p_force_drop then raise; end if;
+    end;
+
+
+    begin
+      dbms_scheduler.drop_chain_rule(chain_name => l_prv_chain_name, rule_name => l_prv_chain_rule_1);
+    exception when others then
+      if not p_force_drop then raise; end if;
+    end;
+    begin
+      dbms_scheduler.drop_chain_rule(chain_name => l_prv_chain_name, rule_name => l_prv_chain_rule_2);
+    exception when others then
+      if not p_force_drop then raise; end if;
+    end;
+    begin
+      dbms_scheduler.drop_chain_rule(chain_name => l_prv_chain_name, rule_name => l_prv_chain_rule_3);
+    exception when others then
+      if not p_force_drop then raise; end if;
+    end;
+    begin
+      dbms_scheduler.drop_chain_rule(chain_name => l_prv_chain_name, rule_name => l_prv_chain_rule_4);
+    exception when others then
+      if not p_force_drop then raise; end if;
+    end;
+
+
+    begin
+      dbms_scheduler.drop_chain_step(chain_name => l_prv_chain_name, step_name => l_prv_chain_step_1);
+    exception when others then
+      if not p_force_drop then raise; end if;
+    end;
+    begin
+      dbms_scheduler.drop_chain_step(chain_name => l_prv_chain_name, step_name => l_prv_chain_step_2);
+    exception when others then
+      if not p_force_drop then raise; end if;
+    end;
+    begin
+      dbms_scheduler.drop_chain_step(chain_name => l_prv_chain_name, step_name => l_prv_chain_step_3);
+    exception when others then
+      if not p_force_drop then raise; end if;
+    end;
+
+
+    begin
+      dbms_scheduler.drop_chain(chain_name => l_prv_chain_name);
+    exception when others then
+      if not p_force_drop then raise; end if;
+    end;
+
+
+    begin
+      dbms_scheduler.drop_program(program_name => l_prv_program_refresh);
+    exception when others then
+      if not p_force_drop then raise; end if;
+    end;
+
+
+    begin
+      dbms_scheduler.drop_program(program_name => l_prv_program_monitoring);
+    exception when others then
+      if not p_force_drop then raise; end if;
+    end;
+
+    -- create
+    begin
+    dbms_scheduler.create_program (
+       program_name          => l_prv_program_monitoring,
+       program_type          => 'STORED_PROCEDURE',
+       program_action        => $$plsql_unit||'.MONITOR_SCHEDULES',
+       number_of_arguments   => 0,
+       enabled               => TRUE,
+       comments              => 'monitorng jobs statuses');
+    exception when others then
+      if not p_force_create then raise; end if;
+    end;
+
+
+    begin
+    dbms_scheduler.create_program (
+       program_name          => l_prv_program_refresh,
+       program_type          => 'STORED_PROCEDURE',
+       program_action        => $$plsql_unit||'.REFRESH_SCHEDULES',
+       number_of_arguments   => 0,
+       enabled               => TRUE,
+       comments              => 'monitorng jobs statuses');
+    exception when others then
+      if not p_force_create then raise; end if;
+    end;
+
+
+    begin
+    dbms_scheduler.create_chain (
+       chain_name            =>  l_prv_chain_name,
+       rule_set_name         =>  NULL,
+       evaluation_interval   =>  NULL,
+       comments              =>  'chain for monitoring jobs of mk_scheduler');
+    exception when others then
+      if not p_force_create then raise; end if;
+    end;
+
+
+    begin
+      dbms_scheduler.define_chain_step(chain_name => l_prv_chain_name, step_name => l_prv_chain_step_1, program_name => l_prv_program_monitoring);
+    exception when others then
+      if not p_force_create then raise; end if;
+    end;
+    begin
+      dbms_scheduler.define_chain_step(chain_name => l_prv_chain_name, step_name => l_prv_chain_step_2,      program_name => l_prv_program_refresh);
+    exception when others then
+      if not p_force_create then raise; end if;
+    end;
+    begin
+      dbms_scheduler.define_chain_step(chain_name => l_prv_chain_name, step_name => l_prv_chain_step_3, program_name => l_prv_program_monitoring);
+    exception when others then
+      if not p_force_create then raise; end if;
     end;
 
     begin
-      sys.dbms_scheduler.create_job(job_name            => 'MK_SCHEDULER_JOBS_MONITORING',
-                                    job_type            => 'STORED_PROCEDURE',
-                                    job_action          => 'mk_scheduler_pkg.monitor_schedules',
-                                    schedule_name       => 'SCHEDULE_EVERY_2_SECONDS',
-                                    job_class           => 'MK_SCHEDULER_JOB_CLASS_LOG',
-                                    enabled             => false,
-                                    auto_drop           => false,
-                                    comments            => '');
-    exception when others then null;
+      dbms_scheduler.define_chain_rule(
+        chain_name => l_prv_chain_name,
+        condition => 'TRUE',
+        action => 'START '||l_prv_chain_step_1,
+        rule_name => l_prv_chain_rule_1);
+    exception when others then
+      if not p_force_create then raise; end if;
+    end;
+    begin
+      dbms_scheduler.define_chain_rule(
+        chain_name => l_prv_chain_name,
+        condition => l_prv_chain_step_1||' SUCCEEDED',
+        action => 'START '||l_prv_chain_step_2,
+        rule_name => l_prv_chain_rule_2);
+    exception when others then
+      if not p_force_create then raise; end if;
+    end;
+    begin
+      dbms_scheduler.define_chain_rule(
+        chain_name => l_prv_chain_name,
+        condition => l_prv_chain_step_2||' SUCCEEDED',
+        action => 'START '||l_prv_chain_step_3,
+        rule_name => l_prv_chain_rule_3);
+    exception when others then
+      if not p_force_create then raise; end if;
+    end;
+    begin
+      dbms_scheduler.define_chain_rule(
+        chain_name => l_prv_chain_name,
+        condition => l_prv_chain_step_3||' SUCCEEDED',
+        action => 'END',
+        rule_name => l_prv_chain_rule_4);
+    exception when others then 
+      if not p_force_create then raise; end if;
+    end;
+
+
+    begin
+      dbms_scheduler.enable(name => l_prv_chain_name);
+    exception when others then
+      if not p_force_create then raise; end if;
+    end;
+
+
+    begin
+      dbms_scheduler.create_schedule(schedule_name   => l_prv_schedule_name,
+                                     start_date      => to_date('01-01-2000 00:00:00', 'dd-mm-yyyy hh24:mi:ss'),
+                                     repeat_interval => 'Freq=Secondly;Interval=15',
+                                     end_date        => to_date(null),
+                                     comments        => 'repeat interval 15 seconds');
+    exception when others then
+      if not p_force_create then raise; end if;
+    end;
+
+
+    begin
+      dbms_scheduler.create_job_class(job_class_name          => l_prv_job_class_name,
+--                                      logging_level           => dbms_scheduler.logging_failed_runs,
+                                      logging_level           => dbms_scheduler.logging_runs,
+                                      log_history             => l_prv_log_history,
+                                      comments                => 'mk scheduler jobs class');
+    exception when others then
+      if not p_force_create then raise; end if;
+    end;
+
+
+    begin
+    dbms_scheduler.create_job (
+       job_name        => l_prv_job_name,
+       job_type        => 'CHAIN',
+       job_action      => l_prv_chain_name,
+       schedule_name   => l_prv_schedule_name,
+       job_class       => l_prv_job_class_name,
+       enabled         => FALSE,
+       auto_drop       => FALSE);
+    exception when others then
+      if not p_force_create then raise; end if;
     end;
 
     begin
-      sys.dbms_scheduler.create_job(job_name            => 'MK_SCHEDULER_JOBS_PLANNING',
-                                    job_type            => 'STORED_PROCEDURE',
-                                    job_action          => 'mk_scheduler_pkg.planning_scheduler_jobs',
-                                    schedule_name       => 'SCHEDULE_EVERY_10_SECONDS',
-                                    job_class           => 'MK_SCHEDULER_JOB_CLASS_LOG',
-                                    enabled             => false,
-                                    auto_drop           => false,
-                                    comments            => '');
-    exception when others then null;
+      dbms_scheduler.enable(name => l_prv_job_name);
+    exception when others then
+      if not p_force_create then raise; end if;
     end;
-
-    begin
-      sys.dbms_scheduler.create_job(job_name            => 'MK_SCHEDULER_JOBS_REFRESH',
-                                    job_type            => 'STORED_PROCEDURE',
-                                    job_action          => 'mk_scheduler_pkg.refresh_schedules',
-                                    schedule_name       => 'SCHEDULE_EVERY_10_SECONDS_L_5',
-                                    job_class           => 'MK_SCHEDULER_JOB_CLASS_LOG',
-                                    enabled             => false,
-                                    auto_drop           => false,
-                                    comments            => '');
-    exception when others then null;
-    end;
-
-    begin sys.dbms_scheduler.enable('MK_SCHEDULER_JOBS_MONITORING'); end;
-
-    begin sys.dbms_scheduler.enable('MK_SCHEDULER_JOBS_PLANNING'); end;
-
-    begin sys.dbms_scheduler.enable('MK_SCHEDULER_JOBS_REFRESH'); end;
 
   end;
 
