@@ -60,6 +60,8 @@ create or replace package mk_scheduler_pkg is
   
   c_job_class             constant t_parameter_nm := 'job_class';
   
+  c_concurrency_seconds   constant t_parameter_nm := 'concurrency_seconds';
+  
   -- параметры по умолчанию, если в таблице параметров не найдено значение
   c_def_max_parallel_jobs     constant t_parameter_num_value := 32;
   c_def_max_parallel_lvl_jobs constant t_parameter_num_value := 32;
@@ -68,6 +70,8 @@ create or replace package mk_scheduler_pkg is
   c_def_force_stop_send_kill  constant boolean := true;
   
   c_def_job_class             constant t_job_class_name := 'DEFAULT_JOB_CLASS';
+  
+  c_def_concurrency_seconds   constant t_parameter_num_value := 5;
 
   -- Public function and procedure declarations
   function create_scheduler_job(
@@ -482,6 +486,54 @@ create or replace package body mk_scheduler_pkg is
     return false;
   end;
   
+  -- ѕроверить конкуренцию запущенных джобов
+  function check_concurrency(p_job_id in t_job_id)
+  return boolean
+  is
+    l_cnt          number := 0;
+    l_cnt_parallel number := 0;
+    l_concurrency_seconds t_parameter_num_value;
+  begin
+    
+    l_concurrency_seconds := nvl(get_parameter_num_value(c_concurrency_seconds), c_def_concurrency_seconds);
+
+    select --sw.sid, sw.module, sw.action, sl.sid, sl.module, sl.action, sl.wait_class, sl.event, sl.seconds_in_wait
+           count(*) cnt
+      into l_cnt
+      from mk_scheduler_jobs mk, all_scheduler_running_jobs rj, v$session sw, v$session sl
+     where 1=1
+       and mk.job_id = p_job_id
+       and rj.owner = mk.owner
+       and rj.job_name = mk.qualified_job_name
+       and rj.session_id = sw.sid
+       and sw.sid = sl.final_blocking_session
+       and sl.wait_class in ('Application','Concurrency')
+       and sl.seconds_in_wait > l_concurrency_seconds;
+
+    select --sw.sid, sw.module, sw.action, sl.sid, sl.module, sl.action, sl.wait_class, sl.event, sl.seconds_in_wait
+           count(*) cnt
+      into l_cnt_parallel
+      from mk_scheduler_jobs mk, all_scheduler_running_jobs rj, v$px_session psw, v$session sw, v$session sl
+     where 1=1
+       and mk.job_id = p_job_id
+       and rj.owner = mk.owner
+       and rj.job_name = mk.qualified_job_name
+       and rj.session_id = psw.qcsid
+       and psw.sid = sw.sid
+       and sw.sid = sl.final_blocking_session
+       and sl.wait_class in ('Application','Concurrency')
+       and sl.seconds_in_wait > l_concurrency_seconds;
+     
+    if (l_cnt > 0 or l_cnt_parallel > 0) then
+      return true;
+    end if;
+    
+    return false;
+    
+  exception when others then
+    return false;    
+  end;
+  
   -- «апуск запланированных заданий по этапам
   procedure refresh_schedules
   is
@@ -598,10 +650,13 @@ create or replace package body mk_scheduler_pkg is
   begin
     -- создание и планирование активных джобов
     for i in (select job_id from mk_scheduler_jobs where is_active = c_is_active_active) loop
-      create_oracle_job(i.job_id);
-      update_scheduler_job_status(i.job_id, c_is_active_created);
-      -- запланировать только созданные задани€
-      update_scheduler_job_status(i.job_id, c_is_active_planned);
+      if create_oracle_job(i.job_id) then
+        update_scheduler_job_status(i.job_id, c_is_active_created);
+        -- запланировать только созданные задани€
+        update_scheduler_job_status(i.job_id, c_is_active_planned);
+      else
+        update_scheduler_job_status(i.job_id, c_is_active_created);
+      end if;        
     end loop;
     
     -- обновление статусов запущенных джобов
@@ -624,6 +679,13 @@ create or replace package body mk_scheduler_pkg is
               kill_scheduler_job(i.job_id);
               update_scheduler_job_status(i.job_id, c_is_active_timeout);
               update_error_message(i.job_id, 'job timeout, execution time exceeded, session mark kill');
+            end if;
+            if not check_concurrency(i.job_id) then
+              update_scheduler_job_status(i.job_id, c_is_active_running);
+            else
+              kill_scheduler_job(i.job_id);
+              update_scheduler_job_status(i.job_id, c_is_active_send_kill);
+              update_error_message(i.job_id, 'job killed becouse of concurrency');
             end if;
           end;
         when c_job_stat_succeeded then
@@ -723,7 +785,7 @@ create or replace package body mk_scheduler_pkg is
         when c_job_stat_stopped then
           begin
             update_scheduler_job_status(i.job_id, c_is_active_killed);
-            update_error_message(i.job_id, 'job was stopped');
+            --update_error_message(i.job_id, 'job was stopped');
           end;
         else 
           begin
@@ -746,8 +808,8 @@ create or replace package body mk_scheduler_pkg is
           end;
         when c_job_stat_running then
           begin
-            update_scheduler_job_status(i.job_id, c_is_active_created);
             kill_scheduler_job(i.job_id);
+            update_scheduler_job_status(i.job_id, c_is_active_created);
             update_error_message(i.job_id, 'job with CREATED state was RUNNING, job marked to stop');
           end;
         when c_job_stat_succeeded then

@@ -2,7 +2,7 @@
 revoke create any job from mk;
 revoke manage scheduler from mk;
 revoke create any rule set from mk;
-grant create any rule to mk;
+revoke create any rule from mk;
 revoke create any evaluation context from mk;
 
 --grant create job to mk;

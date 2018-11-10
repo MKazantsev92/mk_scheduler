@@ -55,8 +55,9 @@ insert into mk_scheduler_jobs_parameters (name, char_value, parameter_comment) v
 insert into mk_scheduler_jobs_parameters (name, char_value, parameter_comment) values ('listener_schedule_name_15_seconds', 'MK_SCHEDULE_EVERY_15_SECONDS',   'listener schedule name');
 insert into mk_scheduler_jobs_parameters (name, char_value, parameter_comment) values ('listener_job_class_name',           'MK_SCHEDULER_LSNR_JOB_CLASS',    'listener job class name');
 insert into mk_scheduler_jobs_parameters (name, char_value, parameter_comment) values ('listener_job_name',                 'MK_SCHEDULER_LSNR_JOB',          'listener job name');
-
 insert into mk_scheduler_jobs_parameters (name, num_value,  parameter_comment) values ('listener_log_history',              7,                                'listener log history days');
+
+insert into mk_scheduler_jobs_parameters (name, num_value,  parameter_comment) values ('concurrency_seconds',               5,                                'check for concurrency/application seconds before send kill job');
 
 commit;
 
@@ -183,12 +184,13 @@ select /*+ use_nl(mksj sj srj jrd)*/
        mksj.qualified_job_name,
        coalesce(sj.job_action, mksj.job_action) job_action,
        coalesce(to_char(srj.session_id), jrd.session_id) session_id,
+       srj.slave_process_id,
+       nvl2(slave_process_id, 'kill -9 '||slave_process_id, null) kill_os_process,
        sj.job_creator,
        sj.enabled,
        mksj.job_comment,
        jrd.error#,
        jrd.additional_info,
-       srj.slave_process_id,
        sj.run_count,
        sj.retry_count,
        sj.failure_count,
@@ -211,14 +213,14 @@ commit;
 
 select t.*, rowid from mk_scheduler_jobs t;
 
-select t.* from mk_scheduler_jobs_v as of timestamp (to_timestamp('08.11.2018 22:58:20','dd.mm.yyyy hh24:mi:ss'))t;
+--select t.* from mk_scheduler_jobs_v as of timestamp (to_timestamp('08.11.2018 22:58:20','dd.mm.yyyy hh24:mi:ss'))t;
 
 select mk_scheduler_pkg.check_time_running_sql(t.job_id) flg, t.* from mk_scheduler_jobs_v t where job_name <> 'shrink_authorizations';
 
 begin mk_scheduler_pkg.create_listener; end;
 /
 
-begin mk_scheduler_pkg.create_listener(false, false); end;
+begin mk_scheduler_pkg.create_listener(true, false); end;
 /
 
 begin mk_scheduler_pkg.start_listener(false); end;
