@@ -200,7 +200,7 @@ create or replace package body mk_scheduler_pkg is
   begin
     update mk_scheduler_jobs set is_active = p_is_active where job_id = p_job_id;
     commit;
-    update_error_message(p_job_id);
+    --update_error_message(p_job_id);
     return true;
   exception when others then 
     rollback;
@@ -425,27 +425,36 @@ create or replace package body mk_scheduler_pkg is
   return boolean
   is
     l_scheduler_job t_scheduler_job;
-    l_ora_job_stat t_ora_job_stat;
+    l_ora_job_stat_act t_ora_job_stat := null;
+    l_ora_job_stat_log t_ora_job_stat := null;
   begin
     get_scheduler_job(p_job_id, l_scheduler_job);
-    select status 
-      into l_ora_job_stat
-      from (
-    select 1 ord, 0 log_id, owner, job_name, sj.state status
-      from all_scheduler_jobs sj
-     where owner = l_scheduler_job.owner
-       and job_name = l_scheduler_job.qualified_job_name
-    union all
-    select 2 ord, log_id, owner, job_name, status
-      from all_scheduler_job_run_details
-     where owner = l_scheduler_job.owner
-       and job_name = l_scheduler_job.qualified_job_name
-    order by ord, log_id desc
-    )
-    where rownum = 1;
-    p_ora_job_stat := l_ora_job_stat;
+    
+    begin
+      select state status
+        into l_ora_job_stat_act
+        from all_scheduler_jobs
+       where owner = l_scheduler_job.owner
+         and job_name = l_scheduler_job.qualified_job_name;
+    exception when no_data_found then
+      l_ora_job_stat_act := null;
+      select status 
+        into l_ora_job_stat_log
+        from (
+        select status
+          from all_scheduler_job_run_details
+         where owner = l_scheduler_job.owner
+           and job_name = l_scheduler_job.qualified_job_name
+         order by log_id desc)
+       where rownum = 1;
+    when others then
+      raise;
+    end;
+    
+    p_ora_job_stat := nvl(l_ora_job_stat_act, l_ora_job_stat_log);
     return true;
   exception when others then
+    p_ora_job_stat := null;
     update_error_message(p_job_id, 'cannot get oracle job status: '||sqlerrm);
     return false;
   end;
@@ -503,7 +512,7 @@ create or replace package body mk_scheduler_pkg is
     
     l_concurrency_seconds := nvl(get_parameter_num_value(c_concurrency_seconds), c_def_concurrency_seconds);
 
-    select --sw.sid, sw.module, sw.action, sl.sid, sl.module, sl.action, sl.wait_class, sl.event, sl.seconds_in_wait
+    select /*+ ordered */
            count(*) cnt
       into l_cnt
       from mk_scheduler_jobs mk, all_scheduler_running_jobs rj, v$session sw, v$session sl
@@ -516,7 +525,7 @@ create or replace package body mk_scheduler_pkg is
        and sl.wait_class in ('Application','Concurrency')
        and sl.seconds_in_wait > l_concurrency_seconds;
 
-    select --sw.sid, sw.module, sw.action, sl.sid, sl.module, sl.action, sl.wait_class, sl.event, sl.seconds_in_wait
+    select /*+ ordered */
            count(*) cnt
       into l_cnt_parallel
       from mk_scheduler_jobs mk, all_scheduler_running_jobs rj, v$px_session psw, v$session sw, v$session sl
@@ -537,6 +546,7 @@ create or replace package body mk_scheduler_pkg is
     return false;
     
   exception when others then
+    update_error_message(p_job_id, 'cannot check job concurrency: '||sqlerrm);
     return false;    
   end;
   
@@ -677,7 +687,7 @@ create or replace package body mk_scheduler_pkg is
         when c_job_stat_running then
           begin
             if check_time_running(i.job_id) then
-              update_scheduler_job_status(i.job_id, c_is_active_running);
+              update_error_message(i.job_id);
             else
               kill_scheduler_job(i.job_id);
               update_scheduler_job_status(i.job_id, c_is_active_timeout);
@@ -1202,12 +1212,12 @@ create or replace package body mk_scheduler_pkg is
       if not p_force_create then raise; end if;
     end;
 
-    begin
+/*    begin
       dbms_scheduler.enable(name => l_prv_job_name);
     exception when others then
       if not p_force_create then raise; end if;
-    end;
-
+    end;*/
+  
   end;
 
 end mk_scheduler_pkg;

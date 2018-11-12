@@ -1,22 +1,22 @@
---revoke create job from mk;
-revoke create any job from mk;
-revoke manage scheduler from mk;
-revoke create any rule set from mk;
-revoke create any rule from mk;
-revoke create any evaluation context from mk;
+--revoke create job from tctdbs;
+revoke create any job from tctdbs;
+revoke manage scheduler from tctdbs;
+revoke create any rule set from tctdbs;
+revoke create any rule from tctdbs;
+revoke create any evaluation context from tctdbs;
 
-revoke select on v_$session from mk;
-revoke select on v_$px_session from mk;
+revoke select on v_$session from tctdbs;
+revoke select on v_$px_session from tctdbs;
 
---grant create job to mk;
-grant create any job to mk;
-grant manage scheduler to mk;
-grant create any rule set to mk;
-grant create any rule to mk;
-grant create any evaluation context to mk;
+--grant create job to tctdbs;
+grant create any job to tctdbs;
+grant manage scheduler to tctdbs;
+grant create any rule set to tctdbs;
+grant create any rule to tctdbs;
+grant create any evaluation context to tctdbs;
 
-grant select on v_$session to mk;
-grant select on v_$px_session to mk;
+grant select on v_$session to tctdbs;
+grant select on v_$px_session to tctdbs;
 
---grant dba to mkazantsev;
+grant dba to mkazantsev;
 --revoke dba from mkazantsev;
