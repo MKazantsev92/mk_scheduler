@@ -34,13 +34,13 @@ create table mk_scheduler_jobs_parameters (
 )
 cache;
 
-insert into mk_scheduler_jobs_parameters (name, num_value, parameter_comment) values ('max_parallel_jobs', 16, 'maximum count of running jobs on one time');
-insert into mk_scheduler_jobs_parameters (name, num_value, parameter_comment) values ('max_parallel_lvl_jobs', 4, 'maximum count of running jobs on one time on one level_id by job_name');
+insert into mk_scheduler_jobs_parameters (name, num_value, parameter_comment) values ('max_parallel_jobs',                  16,                               'maximum count of running jobs on one time');
+insert into mk_scheduler_jobs_parameters (name, num_value, parameter_comment) values ('max_parallel_lvl_jobs',              4,                                'maximum count of running jobs on one time on one level_id by job_name');
 
-insert into mk_scheduler_jobs_parameters (name, bool_value, parameter_comment) values ('force_stop_running', 'Y', 'send force or normal stop for running jobs');
-insert into mk_scheduler_jobs_parameters (name, bool_value, parameter_comment) values ('force_stop_send_kill', 'Y', 'send force or normal stop for jobs marked to stop');
+insert into mk_scheduler_jobs_parameters (name, bool_value, parameter_comment) values ('force_stop_running',                'Y',                              'send force or normal stop for running jobs');
+insert into mk_scheduler_jobs_parameters (name, bool_value, parameter_comment) values ('force_stop_send_kill',              'Y',                              'send force or normal stop for jobs marked to stop');
 
-insert into mk_scheduler_jobs_parameters (name, char_value, parameter_comment) values ('job_class', 'MK_SCHEDULER_JOB_CLASS', 'job class name for all created jobs');
+insert into mk_scheduler_jobs_parameters (name, char_value, parameter_comment) values ('job_class',                         'MK_SCHEDULER_JOB_CLASS',         'job class name for all created jobs');
 
 insert into mk_scheduler_jobs_parameters (name, char_value, parameter_comment) values ('listener_program_monitoring',       'MK_SCHEDULER_LSNR_MONITORING',   'listener monitoring program name');
 insert into mk_scheduler_jobs_parameters (name, char_value, parameter_comment) values ('listener_program_refresh',          'MK_SCHEDULER_LSNR_REFRESH',      'listener refresh program name');
@@ -229,6 +229,9 @@ begin mk_scheduler_pkg.start_listener(false); end;
 begin mk_scheduler_pkg.monitor_schedules; end;
 /
 
+begin dbms_scheduler.run_job('MK_SCHEDULER_LSNR_JOB'); end;
+/
+
 --begin mk_scheduler_pkg.kill_all_scheduler_jobs; end;
 /
 
@@ -236,6 +239,7 @@ select * from dba_scheduler_programs where owner = 'TCTDBS' and program_name lik
 select * from dba_scheduler_chains where owner = 'TCTDBS' and chain_name like 'MK%';
 select * from dba_scheduler_chain_steps where owner = 'TCTDBS' and chain_name like 'MK%';
 select * from dba_scheduler_chain_rules where owner = 'TCTDBS' and chain_name like 'MK%';
+select * from dba_scheduler_job_classes where job_class_name = 'MK_SCHEDULER_LSNR_JOB_CLASS';
 
 select t.last_start_date, t.next_run_date, t.last_run_duration, t.* from dba_scheduler_jobs t where job_name = 'MK_SCHEDULER_LSNR_JOB';
 

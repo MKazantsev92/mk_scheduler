@@ -120,49 +120,49 @@ create or replace package body mk_scheduler_pkg is
   -- параметры из таблицы
   c_prv_program_monitoring  constant t_parameter_nm := 'listener_program_monitoring';
   c_prv_program_refresh     constant t_parameter_nm := 'listener_program_refresh';
-                                
+  
   c_prv_chain_name          constant t_parameter_nm := 'listener_chain_name';
-                                
+  
   c_prv_chain_step_1        constant t_parameter_nm := 'listener_chain_step_1';
   c_prv_chain_step_2        constant t_parameter_nm := 'listener_chain_step_2';
   c_prv_chain_step_3        constant t_parameter_nm := 'listener_chain_step_3';
-                                
+  
   c_prv_chain_rule_1        constant t_parameter_nm := 'listener_chain_rule_1';
   c_prv_chain_rule_2        constant t_parameter_nm := 'listener_chain_rule_2';
   c_prv_chain_rule_3        constant t_parameter_nm := 'listener_chain_rule_3';
   c_prv_chain_rule_4        constant t_parameter_nm := 'listener_chain_rule_4';
-                                
+  
   c_prv_schedule_name       constant t_parameter_nm := 'listener_schedule_name_15_seconds';
-                                
+  
   c_prv_job_class_name      constant t_parameter_nm := 'listener_job_class_name';
-                                
+  
   c_prv_job_name            constant t_parameter_nm := 'listener_job_name';
-                                
+  
   c_prv_log_history         constant t_parameter_nm := 'listener_log_history';
   
   -- параметры по умолчанию, если в таблице параметров не найдено значение
   c_prv_def_program_monitoring  constant t_program_name    := 'MK_SCHEDULER_LSNR_MONITORING';
   c_prv_def_program_refresh     constant t_program_name    := 'MK_SCHEDULER_LSNR_REFRESH';
-                                
+  
   c_prv_def_chain_name          constant t_chain_name      := 'MK_SCHEDULER_LSNR_CHAIN';
-                                
+  
   c_prv_def_chain_step_1        constant t_chain_step_name := 'MONITORING_1';
   c_prv_def_chain_step_2        constant t_chain_step_name := 'REFRESH';
   c_prv_def_chain_step_3        constant t_chain_step_name := 'MONITORING_2';
-                                
+  
   c_prv_def_chain_rule_1        constant t_chain_rule_name := 'MK_SCHEDULER_LSNR_CHAIN_RULE_1';
   c_prv_def_chain_rule_2        constant t_chain_rule_name := 'MK_SCHEDULER_LSNR_CHAIN_RULE_2';
   c_prv_def_chain_rule_3        constant t_chain_rule_name := 'MK_SCHEDULER_LSNR_CHAIN_RULE_3';
   c_prv_def_chain_rule_4        constant t_chain_rule_name := 'MK_SCHEDULER_LSNR_CHAIN_RULE_4';
-                                
+  
   c_prv_def_schedule_name       constant t_schedule_name   := 'MK_SCHEDULE_EVERY_15_SECONDS';
-                                
+  
   c_prv_def_job_class_name      constant t_job_class_name  := 'MK_SCHEDULER_LSNR_JOB_CLASS';
-                                
+  
   c_prv_def_job_name            constant t_ora_job_name    := 'MK_SCHEDULER_LSNR_JOB';
-                                
+  
   c_prv_def_log_history         constant t_log_history     := 14;
-
+  
   -- Function and procedure implementations
   
   -- Обновление записи об ошибке
@@ -364,6 +364,8 @@ create or replace package body mk_scheduler_pkg is
   function create_oracle_job(p_job_id t_job_id)
   return boolean
   is
+    e_already_exists exception; --declare a user defined exception
+    pragma exception_init(e_already_exists, -27477); --bind the error code to the above 
     l_scheduler_job t_scheduler_job := null;
     l_job_class     t_job_class_name;
   begin
@@ -377,11 +379,15 @@ create or replace package body mk_scheduler_pkg is
                                 job_action          => l_scheduler_job.job_action,
                                 enabled             => false,
                                 auto_drop           => true);
+      update_scheduler_job_status(p_job_id, c_is_active_created);
       return true;
     end if;
-    update_scheduler_job_status(p_job_id, c_is_active_created);
     return false;
-  exception when others then
+  exception when e_already_exists then
+    update_scheduler_job_status(p_job_id, c_is_active_created);
+    return true;
+  when others then
+    update_scheduler_job_status(p_job_id, c_is_active_error);
     update_error_message(p_job_id, 'cannot create oracle job: '||sqlerrm);
     return false;
   end;
@@ -651,11 +657,8 @@ create or replace package body mk_scheduler_pkg is
     -- создание и планирование активных джобов
     for i in (select job_id from mk_scheduler_jobs where is_active = c_is_active_active) loop
       if create_oracle_job(i.job_id) then
-        update_scheduler_job_status(i.job_id, c_is_active_created);
         -- запланировать только созданные задания
         update_scheduler_job_status(i.job_id, c_is_active_planned);
-      else
-        update_scheduler_job_status(i.job_id, c_is_active_created);
       end if;        
     end loop;
     
