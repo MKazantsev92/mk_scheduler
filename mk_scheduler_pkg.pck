@@ -687,9 +687,8 @@ create or replace package body mk_scheduler_pkg is
         when c_job_stat_running then
           begin
             if check_time_running(i.job_id) then
-              update_error_message(i.job_id);
               if not check_concurrency(i.job_id) then
-                update_scheduler_job_status(i.job_id, c_is_active_running);
+              update_error_message(i.job_id);
               else
                 kill_scheduler_job(i.job_id);
                 update_scheduler_job_status(i.job_id, c_is_active_send_kill);
