@@ -688,17 +688,17 @@ create or replace package body mk_scheduler_pkg is
           begin
             if check_time_running(i.job_id) then
               update_error_message(i.job_id);
+              if not check_concurrency(i.job_id) then
+                update_scheduler_job_status(i.job_id, c_is_active_running);
+              else
+                kill_scheduler_job(i.job_id);
+                update_scheduler_job_status(i.job_id, c_is_active_send_kill);
+                update_error_message(i.job_id, 'job killed becouse of concurrency');
+              end if;
             else
               kill_scheduler_job(i.job_id);
               update_scheduler_job_status(i.job_id, c_is_active_timeout);
               update_error_message(i.job_id, 'job timeout, execution time exceeded, session mark kill');
-            end if;
-            if not check_concurrency(i.job_id) then
-              update_scheduler_job_status(i.job_id, c_is_active_running);
-            else
-              kill_scheduler_job(i.job_id);
-              update_scheduler_job_status(i.job_id, c_is_active_send_kill);
-              update_error_message(i.job_id, 'job killed becouse of concurrency');
             end if;
           end;
         when c_job_stat_succeeded then
@@ -740,7 +740,6 @@ create or replace package body mk_scheduler_pkg is
               update_scheduler_job_status(i.job_id, c_is_active_running);
             else
               kill_scheduler_job(i.job_id);
-              update_scheduler_job_status(i.job_id, c_is_active_timeout);
               update_error_message(i.job_id, 'job timeout, execution time exceeded, session mark kill');
             end if;
           end;
